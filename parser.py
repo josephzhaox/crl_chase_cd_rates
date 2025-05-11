@@ -1,61 +1,46 @@
-import requests
+"""
+parser.py
+----------
+Extracts term + APY + rate label from Chase CD page HTML.
+"""
+
+import re
+from typing import List, Dict
 from bs4 import BeautifulSoup
-from google.cloud import firestore
-from datetime import datetime
-import logging
-import google.cloud.logging
 
-# Set up Google Cloud Logging
-client = google.cloud.logging.Client()
-client.setup_logging()
+def _clean(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip()
 
-# Initialize Firestore client
-db = firestore.Client()
+def _is_rate_cell(txt: str) -> bool:
+    return bool(re.search(r"\d+\.\d+\s*%", txt))
 
-def scrape_chase_cd_rates():
-    url = "https://www.chase.com/personal/savings/bank-cd"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-    }
-    
-    try:
-        # Send HTTP request
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        
-        # Parse HTML
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # Find CD rate sections (adjust selectors based on actual HTML structure)
-        cd_sections = soup.find_all('div', class_='rate-table')  # Example class, inspect actual site
-        
-        cd_data = []
-        for section in cd_sections:
-            term = section.find('span', class_='term').text.strip()  # Example selector
-            apy = section.find('span', class_='apy').text.strip()    # Example selector
-            cd_data.append({
-                'term': term,
-                'apy': apy,
-                'timestamp': datetime.utcnow().isoformat(),
-                'source': url
+def parse_rates(html: str) -> List[Dict[str, str | float]]:
+    soup = BeautifulSoup(html, "html.parser")
+
+    # Find the first <table> with an "APY" header
+    target = None
+    for tbl in soup.find_all("table"):
+        headers = [_clean(th.get_text()) for th in tbl.find_all("th")]
+        if any("APY" in h.upper() for h in headers):
+            target = tbl
+            break
+    if not target:
+        return []
+
+    out = []
+    for row in target.find_all("tr"):
+        cells = [_clean(c.get_text()) for c in row.find_all(["th","td"])]
+        if len(cells) < 2:
+            continue
+        term = cells[0]
+        rate_cells = [c for c in cells[1:] if _is_rate_cell(c)]
+        for idx, rc in enumerate(rate_cells):
+            m = re.search(r"([\d.]+)\s*%", rc)
+            if not m:
+                continue
+            out.append({
+                "term": term,
+                "apy": float(m.group(1)),
+                "rate_label": "Relationship" if idx==1 else "Standard"
             })
-        
-        # Store in Firestore
-        for data in cd_data:
-            doc_ref = db.collection('cd_rates').document()
-            doc_ref.set(data)
-            logging.info(f"Saved CD data: {data}")
-        
-        return {"status": "success", "records_saved": len(cd_data)}
-    
-    except Exception as e:
-        logging.error(f"Error during scraping: {str(e)}")
-        return {"status": "error", "message": str(e)}
-
-def main(request=None):
-    """Cloud Function entry point"""
-    result = scrape_chase_cd_rates()
-    return result
-
-if __name__ == "__main__":
-    main()
+    return out
