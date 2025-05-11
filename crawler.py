@@ -4,15 +4,10 @@ from google.cloud import firestore
 from datetime import datetime, timezone
 import logging
 import google.cloud.logging
+from google.auth import default, exceptions
 
-# Set up Google Cloud Logging
-client = google.cloud.logging.Client()
-client.setup_logging()
 
-# Initialize Firestore client
-db = firestore.Client()
-
-def scrape_chase_cd_rates():
+def scrape_chase_cd_rates(db):
     url = "https://www.chase.com/personal/savings/bank-cd"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
@@ -53,8 +48,24 @@ def scrape_chase_cd_rates():
         return {"status": "error", "message": str(e)}
 
 def main(request=None):
+
+    # check credentials
+    try:
+        credentials, project = default()
+        print("Default credentials and project found:", project)
+    except exceptions.DefaultCredentialsError as e:
+        print("Default credentials not found:", e)
+        return
+
+    # Set up Google Cloud Logging
+    client = google.cloud.logging.Client()
+    client.setup_logging()
+
+    # Initialize Firestore client
+    db = firestore.Client()
+
     """Cloud Function entry point"""
-    result = scrape_chase_cd_rates()
+    result = scrape_chase_cd_rates(db)
     return result
 
 if __name__ == "__main__":
