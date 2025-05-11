@@ -1,4 +1,5 @@
-beautifulsoup4==4.12.3
-requests==2.32.3
-google-cloud-firestore==2.16.1
-google-cloud-logging==3.10.0   # optional, for structured logs
+requests
+beautifulsoup4
+google-cloud-firestore
+google-cloud-scheduler
+google-cloud-logging
