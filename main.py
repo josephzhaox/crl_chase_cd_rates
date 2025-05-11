@@ -13,7 +13,7 @@ def fetch_html() -> str:
 
 def save_firestore(rates):
     db = firestore.Client()
-    ts = datetime.datetime.utcnow()
+    ts = datetime.datetime.now(datetime.timezone.utc)
     for r in rates:
         doc_id = f"{ts.isoformat()}_{r['term'].replace(' ','_')}_{r['rate_label']}"
         db.collection(COLLECTION).document(doc_id).set({
